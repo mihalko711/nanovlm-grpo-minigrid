@@ -1,0 +1,8 @@
+PROGRESS.md
+KAGGLE.md
+data/
+checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+nanoVLM/
