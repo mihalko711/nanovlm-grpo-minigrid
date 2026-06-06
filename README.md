@@ -5,6 +5,19 @@
 Сравниваются три подхода: **SFT**, **GRPO-Action**, **GRPO-Reasoning**.  
 Модель работает в режиме VQA: принимает карту среды + текстовый промпт, возвращает следующее действие.
 
+## Установка
+
+```bash
+git clone --recurse-submodules https://github.com/...
+pip install gymnasium minigrid pillow torch transformers datasets einops
+```
+
+Если уже склонировано без субмодуля:
+
+```bash
+git submodule update --init --recursive
+```
+
 ## Структура
 
 ```
