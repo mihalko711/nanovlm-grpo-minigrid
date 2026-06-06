@@ -36,6 +36,11 @@ def get_global_observation(env):
     return Image.fromarray(arr)
 
 
+def get_agent_view(env):
+    arr = env.unwrapped.get_pov_render(32)
+    return Image.fromarray(arr)
+
+
 ACTION_NAMES = ["turn left", "turn right", "move forward"]
 ACTION_IDS = {name: i for i, name in enumerate(ACTION_NAMES)}
 

@@ -5,7 +5,7 @@ from collections import deque
 
 from minigrid.core.world_object import Goal
 
-from env_utils import create_env, get_global_observation, action_to_text, randomize_positions
+from env_utils import create_env, get_global_observation, get_agent_view, action_to_text, randomize_positions
 
 DIR_VEC = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
@@ -118,5 +118,55 @@ def generate_dataset(num_episodes=100):
     print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
 
 
+def generate_dataset_agent(num_episodes=100):
+    env = create_env()
+    os.makedirs("data/images_agent", exist_ok=True)
+
+    successful = 0
+    episode = 0
+    total_steps = 0
+
+    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
+
+    with open("data/sft_dataset_agent.jsonl", "w") as f:
+        while successful < num_episodes:
+            env.reset(seed=random.randint(0, 2**31 - 1))
+            randomize_positions(env)
+            episode += 1
+
+            path = bfs_path(env)
+            if path is None:
+                continue
+
+            for step, action in enumerate(path):
+                img = get_agent_view(env)
+                img_path = f"data/images_agent/ep_{episode:03d}_step_{step:02d}.png"
+                img.save(img_path)
+
+                record = {
+                    "images": [img_path],
+                    "texts": [
+                        {"user": prompt, "assistant": action_to_text(action)}
+                    ],
+                }
+                f.write(json.dumps(record) + "\n")
+
+                env.step(action)
+
+            successful += 1
+            total_steps += len(path)
+            print(
+                f"Episode {episode}: {len(path)} steps, "
+                f"goal reached ({successful}/{num_episodes})"
+            )
+
+    print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
+
+
 if __name__ == "__main__":
-    generate_dataset()
+    import sys
+    mode = sys.argv[1] if len(sys.argv) > 1 else "global"
+    if mode == "agent":
+        generate_dataset_agent()
+    else:
+        generate_dataset()
