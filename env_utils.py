@@ -57,6 +57,14 @@ def get_crop_observation(env, size=7):
     return Image.fromarray(arr)
 
 
+def get_agent_view(env):
+    ue = env.unwrapped
+    arr = ue.get_pov_render(32)
+    img = Image.fromarray(arr)
+    img = img.rotate(-(ue.agent_dir + 1) * 90, expand=True)
+    return img
+
+
 ACTION_NAMES = ["turn left", "turn right", "move forward"]
 ACTION_IDS = {name: i for i, name in enumerate(ACTION_NAMES)}
 

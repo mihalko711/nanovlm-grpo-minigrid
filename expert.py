@@ -7,7 +7,7 @@ from collections import deque
 from minigrid.core.world_object import Goal
 
 from env_utils import (
-    create_env, get_global_observation, get_crop_observation,
+    create_env, get_agent_view,
     action_to_text, randomize_positions,
 )
 
@@ -108,7 +108,7 @@ def generate_dataset_global(num_episodes=100):
                 continue
 
             for step, action in enumerate(path):
-                img = get_global_observation(env)
+                img = get_agent_view(env)
                 img_path = f"data/images/ep_{episode:03d}_step_{step:02d}.png"
                 img.save(img_path)
 
@@ -146,7 +146,7 @@ def generate_dataset_crop(num_episodes=100):
                 continue
 
             for step, action in enumerate(path):
-                img = get_crop_observation(env)
+                img = get_agent_view(env)
                 img_path = f"data/images_crop/ep_{episode:03d}_step_{step:02d}.png"
                 img.save(img_path)
 
@@ -187,8 +187,8 @@ def generate_all(num_episodes=100):
             continue
 
         for step, action in enumerate(path):
-            img_global = get_global_observation(env)
-            img_crop = get_crop_observation(env)
+            img_global = get_agent_view(env)
+            img_crop = get_agent_view(env)
 
             img_path = f"data/images/ep_{episode:03d}_step_{step:02d}.png"
             img_global.save(img_path)
