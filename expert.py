@@ -73,7 +73,7 @@ def bfs_path(env):
     return None
 
 
-def generate_dataset(num_episodes=1000):
+def generate_dataset(num_episodes=100):
     env = create_env()
     os.makedirs("data/images", exist_ok=True)
 
