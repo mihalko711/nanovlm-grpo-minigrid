@@ -2,7 +2,8 @@ import random
 
 from PIL import Image
 import gymnasium as gym
-from minigrid.core.world_object import Goal
+from minigrid.core.grid import Grid
+from minigrid.core.world_object import Goal, Wall
 
 
 def create_env():
@@ -36,8 +37,23 @@ def get_global_observation(env):
     return Image.fromarray(arr)
 
 
-def get_agent_view(env):
-    arr = env.unwrapped.get_pov_render(32)
+def get_crop_observation(env, size=7):
+    ue = env.unwrapped
+    ax, ay = ue.agent_pos
+    half = size // 2
+
+    crop_grid = Grid(size, size)
+    for cx in range(size):
+        for cy in range(size):
+            ox = ax + cx - half
+            oy = ay + cy - half
+            if 0 <= ox < ue.width and 0 <= oy < ue.height:
+                cell = ue.grid.get(ox, oy)
+                crop_grid.set(cx, cy, cell)
+            else:
+                crop_grid.set(cx, cy, Wall())
+
+    arr = crop_grid.render(tile_size=32, agent_pos=(half, half), agent_dir=ue.agent_dir)
     return Image.fromarray(arr)
 
 

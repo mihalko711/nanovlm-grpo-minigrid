@@ -1,11 +1,15 @@
 import json
 import os
 import random
+import sys
 from collections import deque
 
 from minigrid.core.world_object import Goal
 
-from env_utils import create_env, get_global_observation, get_agent_view, action_to_text, randomize_positions
+from env_utils import (
+    create_env, get_global_observation, get_crop_observation,
+    action_to_text, randomize_positions,
+)
 
 DIR_VEC = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
@@ -73,15 +77,25 @@ def bfs_path(env):
     return None
 
 
-def generate_dataset(num_episodes=100):
+def _run_episode(env, num_episodes, successful):
+    env.reset(seed=random.randint(0, 2**31 - 1))
+    randomize_positions(env)
+
+    path = bfs_path(env)
+    if path is None:
+        return None, successful
+
+    return path, successful + 1
+
+
+def generate_dataset_global(num_episodes=100):
     env = create_env()
     os.makedirs("data/images", exist_ok=True)
+    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
 
     successful = 0
     episode = 0
     total_steps = 0
-
-    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
 
     with open("data/sft_dataset.jsonl", "w") as f:
         while successful < num_episodes:
@@ -100,35 +114,28 @@ def generate_dataset(num_episodes=100):
 
                 record = {
                     "images": [img_path],
-                    "texts": [
-                        {"user": prompt, "assistant": action_to_text(action)}
-                    ],
+                    "texts": [{"user": prompt, "assistant": action_to_text(action)}],
                 }
                 f.write(json.dumps(record) + "\n")
-
                 env.step(action)
 
             successful += 1
             total_steps += len(path)
-            print(
-                f"Episode {episode}: {len(path)} steps, "
-                f"goal reached ({successful}/{num_episodes})"
-            )
+            print(f"Episode {episode}: {len(path)} steps, goal reached ({successful}/{num_episodes})")
 
     print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
 
 
-def generate_dataset_agent(num_episodes=100):
+def generate_dataset_crop(num_episodes=100):
     env = create_env()
-    os.makedirs("data/images_agent", exist_ok=True)
+    os.makedirs("data/images_crop", exist_ok=True)
+    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
 
     successful = 0
     episode = 0
     total_steps = 0
 
-    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
-
-    with open("data/sft_dataset_agent.jsonl", "w") as f:
+    with open("data/sft_dataset_crop.jsonl", "w") as f:
         while successful < num_episodes:
             env.reset(seed=random.randint(0, 2**31 - 1))
             randomize_positions(env)
@@ -139,34 +146,80 @@ def generate_dataset_agent(num_episodes=100):
                 continue
 
             for step, action in enumerate(path):
-                img = get_agent_view(env)
-                img_path = f"data/images_agent/ep_{episode:03d}_step_{step:02d}.png"
+                img = get_crop_observation(env)
+                img_path = f"data/images_crop/ep_{episode:03d}_step_{step:02d}.png"
                 img.save(img_path)
 
                 record = {
                     "images": [img_path],
-                    "texts": [
-                        {"user": prompt, "assistant": action_to_text(action)}
-                    ],
+                    "texts": [{"user": prompt, "assistant": action_to_text(action)}],
                 }
                 f.write(json.dumps(record) + "\n")
-
                 env.step(action)
 
             successful += 1
             total_steps += len(path)
-            print(
-                f"Episode {episode}: {len(path)} steps, "
-                f"goal reached ({successful}/{num_episodes})"
-            )
+            print(f"Episode {episode}: {len(path)} steps, goal reached ({successful}/{num_episodes})")
 
     print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
 
 
+def generate_all(num_episodes=100):
+    env = create_env()
+    os.makedirs("data/images", exist_ok=True)
+    os.makedirs("data/images_crop", exist_ok=True)
+    prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
+
+    successful = 0
+    episode = 0
+    total_steps = 0
+
+    f_global = open("data/sft_dataset.jsonl", "w")
+    f_crop = open("data/sft_dataset_crop.jsonl", "w")
+
+    while successful < num_episodes:
+        env.reset(seed=random.randint(0, 2**31 - 1))
+        randomize_positions(env)
+        episode += 1
+
+        path = bfs_path(env)
+        if path is None:
+            continue
+
+        for step, action in enumerate(path):
+            img_global = get_global_observation(env)
+            img_crop = get_crop_observation(env)
+
+            img_path = f"data/images/ep_{episode:03d}_step_{step:02d}.png"
+            img_global.save(img_path)
+            f_global.write(json.dumps({
+                "images": [img_path],
+                "texts": [{"user": prompt, "assistant": action_to_text(action)}],
+            }) + "\n")
+
+            img_path_crop = f"data/images_crop/ep_{episode:03d}_step_{step:02d}.png"
+            img_crop.save(img_path_crop)
+            f_crop.write(json.dumps({
+                "images": [img_path_crop],
+                "texts": [{"user": prompt, "assistant": action_to_text(action)}],
+            }) + "\n")
+
+            env.step(action)
+
+        successful += 1
+        total_steps += len(path)
+        print(f"Episode {episode}: {len(path)} steps, goal reached ({successful}/{num_episodes})")
+
+    f_global.close()
+    f_crop.close()
+    print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
+
+
 if __name__ == "__main__":
-    import sys
-    mode = sys.argv[1] if len(sys.argv) > 1 else "global"
-    if mode == "agent":
-        generate_dataset_agent()
+    mode = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if mode == "global":
+        generate_dataset_global()
+    elif mode == "crop":
+        generate_dataset_crop()
     else:
-        generate_dataset()
+        generate_all()
