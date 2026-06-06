@@ -88,7 +88,7 @@ def _run_episode(env, num_episodes, successful):
     return path, successful + 1
 
 
-def generate_dataset_global(num_episodes=100):
+def generate_dataset_global(num_episodes=20):
     env = create_env()
     os.makedirs("data/images", exist_ok=True)
     prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
@@ -126,7 +126,7 @@ def generate_dataset_global(num_episodes=100):
     print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
 
 
-def generate_dataset_crop(num_episodes=100):
+def generate_dataset_crop(num_episodes=20):
     env = create_env()
     os.makedirs("data/images_crop", exist_ok=True)
     prompt = "What is the next action to reach the green goal? Choose from: turn left, turn right, move forward."
@@ -164,7 +164,7 @@ def generate_dataset_crop(num_episodes=100):
     print(f"Done! Collected {successful} trajectories, {total_steps} total steps.")
 
 
-def generate_all(num_episodes=100):
+def generate_all(num_episodes=20):
     env = create_env()
     os.makedirs("data/images", exist_ok=True)
     os.makedirs("data/images_crop", exist_ok=True)
