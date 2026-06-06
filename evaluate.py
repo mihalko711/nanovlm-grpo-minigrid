@@ -1,13 +1,18 @@
 import sys
 sys.path.append("nanoVLM")
 
+import json
+import os
+import glob
+import argparse
+
 import torch
 from PIL import Image
 
 from models.vision_language_model import VisionLanguageModel
 from data.processors import get_image_processor
 from env_utils import (
-    create_env, get_global_observation, randomize_positions,
+    create_env, get_agent_view, randomize_positions,
     ACTION_NAMES, text_to_action,
 )
 from expert import bfs_path
@@ -63,11 +68,9 @@ def evaluate(model, tokenizer, image_processor, num_episodes=100, max_steps=100)
         step = 0
 
         while not (done or truncated) and step < max_steps:
-            # Process observation
-            img = get_global_observation(env)
+            img = get_agent_view(env)
             processed_img, (n_h, n_w) = image_processor(img)
 
-            # Build prompt with image tokens
             image_string = make_image_string(tokenizer, n_h, n_w, mp_len)
             messages = [
                 {"role": "user", "content": image_string + prompt},
@@ -79,7 +82,6 @@ def evaluate(model, tokenizer, image_processor, num_episodes=100, max_steps=100)
             input_ids = torch.tensor([input_ids], dtype=torch.long, device=device)
             attention_mask = torch.ones_like(input_ids)
 
-            # Generate
             generated_ids = model.generate(
                 input_ids,
                 images=[processed_img.to(dtype=dtype, device=device)],
@@ -93,7 +95,6 @@ def evaluate(model, tokenizer, image_processor, num_episodes=100, max_steps=100)
             action = parse_action(generated_text)
 
             if action is None:
-                # Fallback to first valid action
                 action = 2
 
             _, reward, done, truncated, _ = env.step(action)
@@ -115,22 +116,65 @@ def evaluate(model, tokenizer, image_processor, num_episodes=100, max_steps=100)
     print(f"\nSuccess rate: {success_rate:.1f}%")
     print(f"Avg steps: {avg_steps:.1f} (oracle: {avg_oracle:.1f})")
 
-    return success_rate, avg_steps
+    return success_rate, avg_steps, avg_oracle
+
+
+def evaluate_checkpoints(checkpoints_dir, model, tokenizer, image_processor,
+                          episodes=50, max_steps=100):
+    ckpt_pattern = os.path.join(checkpoints_dir, "sft_epoch_*.pt")
+    ckpt_paths = sorted(glob.glob(ckpt_pattern),
+                        key=lambda p: int(p.split("_epoch_")[1].split(".pt")[0]))
+
+    results = []
+    for ckpt_path in ckpt_paths:
+        epoch = int(ckpt_path.split("_epoch_")[1].split(".pt")[0])
+        print(f"\n{'='*60}")
+        print(f"Evaluating epoch {epoch}...")
+        print(f"{'='*60}")
+        model.load_state_dict(torch.load(ckpt_path, map_location=device), strict=False)
+        model.eval()
+        sr, avg_s, avg_o = evaluate(model, tokenizer, image_processor, episodes, max_steps)
+        results.append({"epoch": epoch, "success_rate": sr, "avg_steps": avg_s, "avg_oracle": avg_o})
+
+    # Final model
+    final_path = os.path.join(checkpoints_dir, "sft_model.pt")
+    if os.path.exists(final_path):
+        print(f"\n{'='*60}")
+        print("Evaluating final model...")
+        print(f"{'='*60}")
+        model.load_state_dict(torch.load(final_path, map_location=device), strict=False)
+        model.eval()
+        sr, avg_s, avg_o = evaluate(model, tokenizer, image_processor, episodes, max_steps)
+        results.append({"epoch": "final", "success_rate": sr, "avg_steps": avg_s, "avg_oracle": avg_o})
+
+    # Print summary
+    print("\n\n=== SUMMARY ===")
+    print(f"{'Epoch':<8} {'Success Rate':<16} {'Avg Steps':<12} {'Oracle Steps':<14}")
+    print("-" * 50)
+    for r in results:
+        epoch_str = str(r['epoch'])
+        print(f"{epoch_str:<8} {r['success_rate']:<16.1f} {r['avg_steps']:<12.1f} {r['avg_oracle']:<14.1f}")
+
+    # Save results
+    out_path = os.path.join(checkpoints_dir, "eval_results.json")
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nResults saved to {out_path}")
+    return results
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=str, default="checkpoints/sft_model.pt")
+    parser.add_argument("--checkpoint", type=str, default=None,
+                        help="Single checkpoint .pt file")
+    parser.add_argument("--checkpoints_dir", type=str, default=None,
+                        help="Directory with sft_epoch_*.pt checkpoints")
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--max_steps", type=int, default=100)
     args = parser.parse_args()
 
-    print(f"Loading model from {args.checkpoint}...")
+    print("Loading base model...")
     model = VisionLanguageModel.from_pretrained("lusxvr/nanoVLM-460M-8k")
-    state = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(state, strict=False)
     model.to(dtype=dtype, device=device)
     model.eval()
 
@@ -141,4 +185,15 @@ if __name__ == "__main__":
         resize_to_max_side_len=model.cfg.resize_to_max_side_len,
     )
 
-    evaluate(model, tokenizer, image_processor, args.episodes, args.max_steps)
+    if args.checkpoints_dir:
+        evaluate_checkpoints(
+            args.checkpoints_dir, model, tokenizer, image_processor,
+            args.episodes, args.max_steps,
+        )
+    elif args.checkpoint:
+        print(f"Loading checkpoint from {args.checkpoint}...")
+        state = torch.load(args.checkpoint, map_location=device)
+        model.load_state_dict(state, strict=False)
+        evaluate(model, tokenizer, image_processor, args.episodes, args.max_steps)
+    else:
+        parser.print_help()
