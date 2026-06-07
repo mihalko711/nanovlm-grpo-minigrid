@@ -21,8 +21,8 @@ git submodule update --init --recursive
 ## Структура
 
 ```
-env_utils.py        — Обёртка MiniGrid (16×16, рандомизация позиций, рендер 512×512)
-expert.py           — BFS-солвер кратчайшего пути + генератор экспертного датасета
+env_utils.py        — Обёртка MiniGrid (EmptyEnv, agent_start_pos=None, рендер 7×7 POV)
+expert.py           — Реактивный эксперт (POV-based) + генератор датасета
 sft_train.ipynb     — SFT-обучение: заморозка vision/LM, тренировка ModalityProjector
 evaluate.py         — Оценка агента: 100 эпизодов, success rate vs BFS-оракул
 nanoVLM/            — Склонированный huggingface/nanoVLM (зависимость)
@@ -40,7 +40,8 @@ KAGGLE.md           — Инструкция по запуску на Kaggle
 ## Пайплайн
 
 ```bash
-python expert.py                  # 1000 экспертных эпизодов → data/sft_dataset.jsonl
+python expert.py                  # 20 экспертных эпизодов → data/sft_dataset.jsonl (по умолч.)
+python expert.py crop 100         # 100 эпизодов в crop-режиме
 jupyter notebook sft_train.ipynb  # SFT проектора
 python evaluate.py --checkpoint checkpoints/sft_model.pt  # замер success rate
 ```

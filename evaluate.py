@@ -7,40 +7,15 @@ import glob
 import argparse
 
 import torch
-from PIL import Image
 
 from models.vision_language_model import VisionLanguageModel
 from data.processors import get_image_processor
-from env_utils import (
-    create_env, get_agent_view, randomize_positions,
-    ACTION_NAMES, text_to_action,
-)
+from env_utils import create_env, get_agent_view
 from expert import bfs_path
+from eval_utils import make_image_string, parse_action
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float16 if device == "cuda" else torch.float32
-
-
-def make_image_string(tokenizer, n_h, n_w, mp_len):
-    parts = []
-    if hasattr(tokenizer, "global_image_token"):
-        parts.append(tokenizer.global_image_token)
-        parts.append(tokenizer.image_token * mp_len)
-        if n_h == 1 and n_w == 1:
-            return "".join(parts)
-    for i in range(n_h):
-        for j in range(n_w):
-            parts.append(getattr(tokenizer, f"r{i+1}c{j+1}"))
-            parts.append(tokenizer.image_token * mp_len)
-    return "".join(parts)
-
-
-def parse_action(text):
-    text = text.strip().lower()
-    for name in ACTION_NAMES:
-        if name in text:
-            return text_to_action(name)
-    return None
 
 
 @torch.inference_mode()
@@ -58,7 +33,6 @@ def evaluate(model, tokenizer, image_processor, num_episodes=100, max_steps=100)
 
     for ep in range(num_episodes):
         env.reset()
-        randomize_positions(env)
         oracle = bfs_path(env)
         oracle_len = len(oracle) if oracle else 0
         oracle_steps += oracle_len
